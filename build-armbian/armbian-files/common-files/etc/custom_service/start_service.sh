@@ -117,6 +117,27 @@ if [[ "${FDTFILE}" =~ ^(rk3568-nsy-g16-plus\.dtb|rk3568-nsy-g68-plus\.dtb|rk3568
     log_message "Network optimizations for ${FDTFILE} applied."
 fi
 
+# For lpa3399pro(rk3399pro) board: Fix permissions and configure DNS
+if [[ "${FDTFILE}" == "rk3399pro-neardi-linux-lc110-base.dtb" ]]; then
+    (
+        # Fix pre-existing flaw: /usr/bin and /usr/sbin had world-writable 777 permissions
+        # This causes Perl taint mode failures (e.g. bluez post-install) and is a security issue
+        chmod 755 /usr/bin /usr/sbin 2>/dev/null
+        log_message "Fixed /usr/bin and /usr/sbin permissions (777 -> 755) for lpa3399pro."
+
+        # Configure persistent DNS via NetworkManager (ignore DHCP-provided DNS)
+        # This fixes DNS resolution when the router's DNS is unreliable
+        if command -v nmcli >/dev/null 2>&1; then
+            nmcli connection modify "Wired connection 1" \
+                ipv4.dns "8.8.8.8 1.1.1.1" \
+                ipv4.ignore-auto-dns yes 2>/dev/null
+            nmcli connection up "Wired connection 1" 2>/dev/null
+            log_message "DNS configured via NetworkManager for lpa3399pro."
+        fi
+    ) &
+    log_message "lpa3399pro board-specific services started."
+fi
+
 # General System Services
 
 # Restart ssh service

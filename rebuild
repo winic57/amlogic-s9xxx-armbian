@@ -92,7 +92,7 @@ stable_kernel=("6.12.y" "6.18.y")
 flippy_kernel=(${stable_kernel[@]})
 beta_kernel=(${stable_kernel[@]})
 rk3588_kernel=("6.1.y")
-rk35xx_kernel=("6.1.y")
+rk35xx_kernel=("6.18.y")
 h6_kernel=("6.6.y")
 specific_6xy=("6.1.y" "6.6.y" "6.12.y" "6.18.y")
 specific_5xy=("5.10.y" "5.15.y")
@@ -220,6 +220,9 @@ init_var() {
                 flippy_kernel=(${2})
                 beta_kernel=(${2})
                 specific_kernel=(${2})
+                rk35xx_kernel=(${2})
+                rk3588_kernel=(${2})
+                h6_kernel=(${2})
                 IFS="${oldIFS}"
                 shift 2
             else
