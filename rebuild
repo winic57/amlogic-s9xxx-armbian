@@ -919,7 +919,9 @@ replace_kernel() {
     tar -mxzf ${kernel_boot} -C ${tag_bootfs}
     [[ "${PLATFORM}" == "allwinner" ]] && (cd ${tag_bootfs} && cp -f uInitrd-${kernel_name} uInitrd && cp -f vmlinuz-${kernel_name} Image)
     [[ "${PLATFORM}" == "amlogic" ]] && (cd ${tag_bootfs} && cp -f uInitrd-${kernel_name} uInitrd && cp -f vmlinuz-${kernel_name} zImage)
-    [[ "${PLATFORM}" == "rockchip" ]] && (cd ${tag_bootfs} && ln -sf uInitrd-${kernel_name} uInitrd && ln -sf vmlinuz-${kernel_name} Image)
+    # Some prebuilt rockchip boot tarballs omit uInitrd-${kernel_name} (no initramfs
+    # baked in). Only symlink uInitrd when it exists; vmlinuz is always present.
+    [[ "${PLATFORM}" == "rockchip" ]] && (cd ${tag_bootfs} && ln -sf vmlinuz-${kernel_name} Image && [[ -e uInitrd-${kernel_name} ]] && ln -sf uInitrd-${kernel_name} uInitrd || true)
     [[ "$(ls ${tag_bootfs}/*${kernel_name} -l 2>/dev/null | grep "^-" | wc -l)" -ge "2" ]] || error_msg "The /boot files is missing."
     [[ "${PLATFORM}" == "amlogic" ]] && get_textoffset "${tag_bootfs}/zImage"
 
