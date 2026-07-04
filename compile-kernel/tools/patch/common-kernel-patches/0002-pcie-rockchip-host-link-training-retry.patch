@@ -1,5 +1,5 @@
 diff --git a/drivers/pci/controller/pcie-rockchip-host.c b/drivers/pci/controller/pcie-rockchip-host.c
-index ee1822ca0..6b219f263 100644
+index ee1822ca0..eba716c4c 100644
 --- a/drivers/pci/controller/pcie-rockchip-host.c
 +++ b/drivers/pci/controller/pcie-rockchip-host.c
 @@ -209,6 +209,7 @@ static int rockchip_pcie_rd_conf(struct pci_bus *bus, u32 devfn, int where,
@@ -14,7 +14,7 @@ index ee1822ca0..6b219f263 100644
  	if (pci_is_root_bus(bus))
  		return rockchip_pcie_rd_own_conf(rockchip, where, size, val);
  
-+	status = rockchip_pcie_read(rockchip, PCIE_CORE_CTRL_PLC1);
++	status = rockchip_pcie_read(rockchip, PCIE_CLIENT_BASIC_STATUS1);
 +	if (!PCIE_LINK_UP(status))
 +		return PCIBIOS_DEVICE_NOT_FOUND;
 +
@@ -33,7 +33,7 @@ index ee1822ca0..6b219f263 100644
  	if (pci_is_root_bus(bus))
  		return rockchip_pcie_wr_own_conf(rockchip, where, size, val);
  
-+	status = rockchip_pcie_read(rockchip, PCIE_CORE_CTRL_PLC1);
++	status = rockchip_pcie_read(rockchip, PCIE_CLIENT_BASIC_STATUS1);
 +	if (!PCIE_LINK_UP(status))
 +		return PCIBIOS_DEVICE_NOT_FOUND;
 +
