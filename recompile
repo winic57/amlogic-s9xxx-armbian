@@ -173,7 +173,7 @@ configure_and_compile() {
     docker exec -i "${docker_container}" sh -c 'echo "Acquire::ForceIPv4 \"true\";" > /etc/apt/apt.conf.d/99force-ipv4' || true
     docker exec -i "${docker_container}" sh -c 'grep -q "precedence ::ffff:0:0/96  100" /etc/gai.conf || echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf' || true
 
-    if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+    if [[ -z "${GITHUB_ACTIONS:-}" && "${PWD}" != *"/home/runner/"* ]]; then
         # Mock apt-get and curl to bypass slow emulated downloads
         docker exec -i "${docker_container}" mv /usr/bin/apt-get /usr/bin/apt-get.orig 2>/dev/null || true
         docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/apt-get
