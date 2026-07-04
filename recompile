@@ -173,17 +173,18 @@ configure_and_compile() {
     docker exec -i "${docker_container}" sh -c 'echo "Acquire::ForceIPv4 \"true\";" > /etc/apt/apt.conf.d/99force-ipv4' || true
     docker exec -i "${docker_container}" sh -c 'grep -q "precedence ::ffff:0:0/96  100" /etc/gai.conf || echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf' || true
 
-    # Mock apt-get and curl to bypass slow emulated downloads
-    docker exec -i "${docker_container}" mv /usr/bin/apt-get /usr/bin/apt-get.orig 2>/dev/null || true
-    docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/apt-get
+    if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+        # Mock apt-get and curl to bypass slow emulated downloads
+        docker exec -i "${docker_container}" mv /usr/bin/apt-get /usr/bin/apt-get.orig 2>/dev/null || true
+        docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/apt-get
 #!/bin/bash
 echo "Mocked apt-get: ignoring command $@"
 exit 0
 EOF' || true
-    docker exec -i "${docker_container}" chmod +x /usr/bin/apt-get || true
+        docker exec -i "${docker_container}" chmod +x /usr/bin/apt-get || true
 
-    docker exec -i "${docker_container}" mv /usr/bin/curl /usr/bin/curl.orig 2>/dev/null || true
-    docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/curl
+        docker exec -i "${docker_container}" mv /usr/bin/curl /usr/bin/curl.orig 2>/dev/null || true
+        docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/curl
 #!/bin/bash
 for arg in "$@"; do
     if [[ "$arg" == *"arm-gnu-toolchain"* ]]; then
@@ -193,15 +194,16 @@ for arg in "$@"; do
 done
 exec /usr/bin/curl.orig "$@"
 EOF' || true
-    docker exec -i "${docker_container}" chmod +x /usr/bin/curl || true
+        docker exec -i "${docker_container}" chmod +x /usr/bin/curl || true
 
-    # Mock ccache wrapper to forward calls to compiler directly
-    docker exec -i "${docker_container}" mv /usr/bin/ccache /usr/bin/ccache.orig 2>/dev/null || true
-    docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/ccache
+        # Mock ccache wrapper to forward calls to compiler directly
+        docker exec -i "${docker_container}" mv /usr/bin/ccache /usr/bin/ccache.orig 2>/dev/null || true
+        docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/ccache
 #!/bin/bash
 exec "$@"
 EOF' || true
-    docker exec -i "${docker_container}" chmod +x /usr/bin/ccache || true
+        docker exec -i "${docker_container}" chmod +x /usr/bin/ccache || true
+    fi
 
     # Pre-populate the toolchain package in the container
     docker exec -i "${docker_container}" mkdir -p /usr/local/toolchain || true
