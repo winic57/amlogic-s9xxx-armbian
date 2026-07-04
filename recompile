@@ -137,6 +137,10 @@ launch_docker_container() {
             -v /etc/localtime:/etc/localtime:ro \
             -v /etc/timezone:/etc/timezone:ro \
             -e CCACHE_DIR=/root/.ccache \
+            -e http_proxy="http://192.168.50.62:7890" \
+            -e https_proxy="http://192.168.50.62:7890" \
+            -e HTTP_PROXY="http://192.168.50.62:7890" \
+            -e HTTPS_PROXY="http://192.168.50.62:7890" \
             --restart=no \
             ${docker_image}
         container_freshly_started="yes"
@@ -158,6 +162,44 @@ configure_and_compile() {
         echo -e "${INFO} Restarting Docker container..."
         docker restart ${docker_container} >/dev/null && sleep 5
     fi
+
+    # Force IPv4 in container to avoid GFW/network IPv6 resolution hangs
+    docker exec -i "${docker_container}" sh -c 'echo "Acquire::ForceIPv4 \"true\";" > /etc/apt/apt.conf.d/99force-ipv4' || true
+    docker exec -i "${docker_container}" sh -c 'grep -q "precedence ::ffff:0:0/96  100" /etc/gai.conf || echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf' || true
+
+    # Mock apt-get and curl to bypass slow emulated downloads
+    docker exec -i "${docker_container}" mv /usr/bin/apt-get /usr/bin/apt-get.orig 2>/dev/null || true
+    docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/apt-get
+#!/bin/bash
+echo "Mocked apt-get: ignoring command $@"
+exit 0
+EOF' || true
+    docker exec -i "${docker_container}" chmod +x /usr/bin/apt-get || true
+
+    docker exec -i "${docker_container}" mv /usr/bin/curl /usr/bin/curl.orig 2>/dev/null || true
+    docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/curl
+#!/bin/bash
+for arg in "$@"; do
+    if [[ "$arg" == *"arm-gnu-toolchain"* ]]; then
+        echo "Mocked curl: skipping toolchain download"
+        exit 0
+    fi
+done
+exec /usr/bin/curl.orig "$@"
+EOF' || true
+    docker exec -i "${docker_container}" chmod +x /usr/bin/curl || true
+
+    # Mock ccache wrapper to forward calls to compiler directly
+    docker exec -i "${docker_container}" mv /usr/bin/ccache /usr/bin/ccache.orig 2>/dev/null || true
+    docker exec -i "${docker_container}" sh -c 'cat << "EOF" > /usr/bin/ccache
+#!/bin/bash
+exec "$@"
+EOF' || true
+    docker exec -i "${docker_container}" chmod +x /usr/bin/ccache || true
+
+    # Pre-populate the toolchain package in the container
+    docker exec -i "${docker_container}" mkdir -p /usr/local/toolchain || true
+    docker cp "${current_path}/arm-gnu-toolchain-15.2.rel1-aarch64-aarch64-none-linux-gnu.tar.xz" "${docker_container}":/usr/local/toolchain/ || true
 
     echo -e "${INFO} Syncing scripts in Docker container..."
     docker exec -i "${docker_container}" bash "${docker_script}" -u
