@@ -38,6 +38,15 @@
 		mmc1 = "/mmc@fe320000";
 	};
 
+	npu-refclk-keepalive {
+		compatible = "rockchip,npu-refclk-keepalive";
+		clocks = <0x7a 0x08>;
+		clock-names = "refclk";
+		assigned-clocks = <0x7a 0x08>;
+		assigned-clock-rates = <0x16e3600>;
+		status = "okay";
+	};
+
 	reserved-memory {
 		#address-cells = <0x02>;
 		#size-cells = <0x02>;
@@ -342,11 +351,15 @@
 		reset-names = "core\0mgmt\0mgmt-sticky\0pipe\0pm\0pclk\0aclk";
 		status = "okay";
 		ep-gpios = <0x19 0x0c 0x00>;
+		reset-gpios = <0x19 0x0c 0x00>;
+		reset-assert-us = <0x186a0>;
+		reset-deassert-us = <0x186a0>;
 		num-lanes = <0x04>;
-		pinctrl-0 = <0x1a>;
+		pinctrl-0 = <0x1a 0xf5>;
 		pinctrl-names = "default";
 		memory-region = <&dma_trans>;
 		rockchip,dma_trx_enabled = <0x01>;
+		rockchip,dma-timeout-ms = <0x1388>;
 		vpcie0v9-supply = <0x1b>;
 		vpcie1v8-supply = <0x1c>;
 		vpcie3v3-supply = <0x1d>;
@@ -595,7 +608,8 @@
 			interrupts = <0x00 0x69 0x04 0x00>;
 			clocks = <0x08 0x81 0x08 0xf6 0x08 0x83>;
 			clock-names = "ref\0bus_early\0suspend";
-			dr_mode = "otg";
+			dr_mode = "host";
+			role-switch-default-mode = "host";
 			phys = <0x32 0x33>;
 			phy-names = "usb2-phy\0usb3-phy";
 			phy_type = "utmi_wide";
@@ -604,6 +618,9 @@
 			snps,dis_u2_susphy_quirk;
 			snps,dis-del-phy-power-chg-quirk;
 			snps,dis-tx-ipgap-linecheck-quirk;
+			snps,xhci-slow-suspend-quirk;
+			snps,xhci-trb-ent-quirk;
+			snps,usb3-warm-reset-on-resume-quirk;
 			power-domains = <0x1e 0x18>;
 			status = "okay";
 		};
@@ -635,6 +652,9 @@
 			snps,dis_u2_susphy_quirk;
 			snps,dis-del-phy-power-chg-quirk;
 			snps,dis-tx-ipgap-linecheck-quirk;
+			snps,xhci-slow-suspend-quirk;
+			snps,xhci-trb-ent-quirk;
+			snps,usb3-warm-reset-on-resume-quirk;
 			power-domains = <0x1e 0x18>;
 			status = "okay";
 		};
@@ -1958,6 +1978,7 @@
 			#clock-cells = <0x00>;
 			clock-output-names = "clk_usbphy0_480m";
 			status = "okay";
+			rockchip,npu-usb0-host-keepalive;
 			phandle = <0x2e>;
 
 			host-port {
@@ -2620,6 +2641,14 @@
 			interrupt-controller;
 			#interrupt-cells = <0x02>;
 			phandle = <0x3d>;
+		};
+
+		npu {
+
+			npu-ref-clk {
+				rockchip,pins = <0x00 0x02 0x01 0xb5>;
+				phandle = <0xf4>;
+			};
 		};
 
 		pcfg-pull-up {
@@ -3300,6 +3329,11 @@
 				rockchip,pins = <0x04 0x1c 0x00 0xb8>;
 				phandle = <0xc0>;
 			};
+			pcie-ep-reset {
+				rockchip,pins = <0x00 0x0c 0x00 0xb5>;
+				phandle = <0xf5>;
+			};
+
 		};
 
 		hym8563 {
@@ -3604,14 +3638,19 @@
 	};
 
 	n4-pwren {
-		compatible = "regulator-fixed";
+		compatible = "regulator-fixed-clock";
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
 		gpio = <0x19 0x09 0x00>;
 		pinctrl-names = "default";
 		pinctrl-0 = <0xf2 0xf4>;
+		startup-delay-us = <0x186a0>;
 		regulator-name = "n4_pwren";
+		clocks = <0x7a 0x08>;
+		clock-names = "enable";
+		assigned-clocks = <0x7a 0x08>;
+		assigned-clock-rates = <0x16e3600>;
 		phandle = <0x1a1>;
 	};
 

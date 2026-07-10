@@ -6,6 +6,16 @@
 name: Build Armbian arm64 server image
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-armbian-arm64-server-image.yml'
+      - 'compile-kernel/tools/config/config-6.18'
+      - 'compile-kernel/tools/patch/common-kernel-patches/**'
+      - 'build-armbian/armbian-files/common-files/etc/model_database.conf'
+      - 'build-armbian/armbian-files/different-files/lpa3399pro/**'
+      - 'kdevbuild/kernel-packages/rk35xx/6.18.33/**'
   repository_dispatch:
   workflow_dispatch:
     inputs:
@@ -324,10 +334,11 @@ jobs:
       - name: Set build matrix based on set_release input
         id: set-matrix
         run: |
-          if [[ "${{ inputs.set_release }}" == "all" ]]; then
+          set_release="${{ inputs.set_release || 'trixie' }}"
+          if [[ "${set_release}" == "all" ]]; then
             MATRIX='{"include":[{"release":"trixie"},{"release":"bookworm"},{"release":"resolute"},{"release":"noble"}]}'
           else
-            MATRIX='{"include":[{"release":"${{ inputs.set_release }}"}]}'
+            MATRIX='{"include":[{"release":"'"${set_release}"'"}]}'
           fi
           echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
 
@@ -410,7 +421,7 @@ jobs:
           docker run --rm --privileged multiarch/qemu-user-static --reset -p yes 2>/dev/null || true
 
           # Set the board name for the base Armbian image
-          config_board="${{ inputs.config_board }}"
+          config_board="${{ inputs.config_board || 'odroidn2' }}"
           [[ -z "${config_board}" ]] && config_board="odroidn2"
 
           # Compile options reference: https://docs.armbian.com/Developer-Guide_Build-Options
@@ -435,7 +446,7 @@ jobs:
 
           # Display disk usage after cleanup
           df -hT ${PWD}
-          echo "build_tag=Armbian_${{ matrix.release }}_arm64_${{ inputs.armbian_edition }}_$(date +"%Y.%m")" >> ${GITHUB_ENV}
+          echo "build_tag=Armbian_${{ matrix.release }}_arm64_${{ inputs.armbian_edition || 'server' }}_$(date +"%Y.%m")" >> ${GITHUB_ENV}
           echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Upload Armbian image to Release
@@ -450,21 +461,48 @@ jobs:
           make_latest: true
           gh_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Stage prebuilt LPA3399Pro kernel (6.18.33)
+      - name: Stage LPA3399Pro kernel (6.18.33)
         if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
+        env:
+          LPA_KERNEL_RELEASE_BASE: https://github.com/winic57/LPA3399Pro/releases/download/Neardi-LPA3399Pro-kernel-6.18
+          LPA_KERNEL_PROXY_PREFIX: https://gitproxy.mrhjx.cn/
+          KERNEL_NAME: 6.18.33-rk35xx-ophub
         run: |
-          # The ophub/kernel GitHub repo has no rk35xx packages, so the rebuild
-          # script's download_kernel step 404s. Stage our prebuilt 6.18.33
-          # ophub-format kernel package directly from the repo checkout; when
-          # rebuild sees the directory already populated, it skips downloading.
-          src="kdevbuild/kernel-packages/rk35xx/6.18.33"
+          set -euo pipefail
+          # The ophub/kernel GitHub repo has no rk35xx packages.  Prefer the
+          # latest LPA3399Pro public kernel release (Image + dtbs.tar.gz +
+          # kos.tar.gz) and synthesize the ophub package layout expected by
+          # rebuild; fall back to the checked-in package if the network is down.
           dst="build-armbian/kernel/rk35xx/6.18.33"
-          [[ -f "${src}/boot-6.18.33-rk35xx-ophub.tar.gz" ]] || {
-            echo "error: prebuilt kernel missing at ${src}"
-            exit 1
+          src="kdevbuild/kernel-packages/rk35xx/6.18.33"
+          work="$(mktemp -d)"
+          mkdir -p "${dst}"
+          download_one() {
+            local name="$1"
+            local url="${LPA_KERNEL_PROXY_PREFIX}${LPA_KERNEL_RELEASE_BASE}/${name}"
+            curl -fL --retry 5 --retry-delay 10 --connect-timeout 20 -o "${work}/${name}" "${url}"
           }
-          mkdir -p "$(dirname "${dst}")"
-          cp -avf "${src}/." "${dst}/"
+          if download_one Image && download_one dtbs.tar.gz && download_one kos.tar.gz; then
+            echo "Using latest LPA3399Pro release kernel artifacts."
+            mkdir -p "${work}/boot/dtb/rockchip" "${work}/dtb_pkg" "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel" "${work}/headers/include"
+            install -m 0644 "${work}/Image" "${work}/boot/vmlinuz-${KERNEL_NAME}"
+            install -m 0644 compile-kernel/tools/config/config-6.18 "${work}/boot/config-${KERNEL_NAME}"
+            tar -xzf "${work}/dtbs.tar.gz" -C "${work}/dtb_pkg"
+            find "${work}/dtb_pkg" -type f -name '*.dtb' -exec cp -av {} "${work}/boot/dtb/rockchip/" \;
+            (cd "${work}/boot" && tar -czf "${dst}/boot-${KERNEL_NAME}.tar.gz" .)
+            (cd "${work}/boot/dtb/rockchip" && tar -czf "${dst}/dtb-rockchip-${KERNEL_NAME}.tar.gz" .)
+            tar -xzf "${work}/kos.tar.gz" -C "${work}"
+            find "${work}/kos" -type f -name '*.ko' -exec cp -av {} "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel/" \;
+            touch "${work}/modroot/lib/modules/${KERNEL_NAME}/modules.order" "${work}/modroot/lib/modules/${KERNEL_NAME}/modules.builtin"
+            depmod -b "${work}/modroot" "${KERNEL_NAME}" || true
+            (cd "${work}/modroot/lib/modules" && tar -czf "${dst}/modules-${KERNEL_NAME}.tar.gz" "${KERNEL_NAME}")
+            cp -af "${src}/header-${KERNEL_NAME}.tar.gz" "${dst}/header-${KERNEL_NAME}.tar.gz"
+            (cd "${dst}" && sha256sum *.tar.gz > sha256sums)
+          else
+            echo "warning: release artifact download failed; falling back to checked-in kernel package."
+            [[ -f "${src}/boot-${KERNEL_NAME}.tar.gz" ]] || { echo "error: prebuilt kernel missing at ${src}"; exit 1; }
+            cp -avf "${src}/." "${dst}/"
+          fi
           echo "Staged kernel package:"
           ls -lh "${dst}/"
 
@@ -474,13 +512,13 @@ jobs:
         with:
           build_target: armbian
           armbian_path: build/output/images/*.img.gz
-          armbian_board: ${{ inputs.armbian_board }}
+          armbian_board: ${{ inputs.armbian_board || 'lpa3399pro' }}
           armbian_kernel: 6.18.33
           auto_kernel: false
-          kernel_repo: ${{ inputs.kernel_repo }}
-          kernel_usage: ${{ inputs.kernel_usage }}
-          armbian_fstype: ${{ inputs.armbian_fstype }}
-          builder_name: ${{ inputs.builder_name }}
+          kernel_repo: ${{ inputs.kernel_repo || 'ophub/kernel' }}
+          kernel_usage: ${{ inputs.kernel_usage || 'stable' }}
+          armbian_fstype: ${{ inputs.armbian_fstype || 'ext4' }}
+          builder_name: ${{ inputs.builder_name || 'ophub' }}
 
       - name: Upload rebuilt images to Release
         uses: ophub/upload-to-releases@main
