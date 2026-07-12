@@ -39,11 +39,11 @@ Kernel package note (critical):
 ```
 CONFIG_BT_HCIUART=m
 CONFIG_BT_HCIUART_SERDEV=y
-# CONFIG_BT_HCIUART_RTL is not set   <-- blocks proper Realtek UART HCI
+CONFIG_BT_HCIUART_RTL=y   # enabled in LPA kernel-6.18/config-6.18 (2026-07-12)
 CONFIG_BT_RTL=m
 ```
 
-Without `CONFIG_BT_HCIUART_RTL=y`, serdev Realtek path will not load `rtl_bt/rtl8821cs_fw.bin` correctly.
+Kernel config now enables `CONFIG_BT_HCIUART_RTL=y`. After deploying the new kernel package, serdev should load `rtl_bt/rtl8821cs_fw.bin`.
 
 Userspace best-effort:
 
@@ -51,4 +51,4 @@ Userspace best-effort:
 - hold BT enable/device-wake GPIOs (gpio2-28 / gpio2-26)
 - `hciattach /dev/ttyS0 rtk_h5 115200 noflow` (may report unknown type depending on bluez)
 
-Next kernel action: enable `CONFIG_BT_HCIUART_RTL=y` and ship DTB with bluetooth `status=okay`.
+DTB bluetooth status=okay is packaged; deploy new kernel modules/Image over SSH (no full reflash).
