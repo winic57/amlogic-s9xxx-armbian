@@ -1,0 +1,12 @@
+[Unit]
+Description=LPA3399Pro WiFi/BT bring-up (reset_gpio + rtw88 + best-effort BT)
+After=systemd-modules-load.service local-fs.target
+Wants=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lpa-wifi-bt-bringup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
