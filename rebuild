@@ -1048,6 +1048,38 @@ refactor_bootfs() {
             "${armbianenv_conf_file}"
     }
 
+    # LPA3399Pro: bare-kernel SD boot needs PARTUUID (above) plus historical stable
+    # cmdline: maxcpus=4 (disable A72 big cores to avoid CPU4/5 Oops killing init),
+    # psci_checker blacklist, rootdelay, etc. See LPA3399Pro docs 2026-06-18 boot series.
+    if [[ "${board}" == "lpa3399pro" ]]; then
+        lpa_stable_args="rootdelay=10 panic=0 usbcore.autosuspend=-1 initcall_blacklist=psci_checker printk.devkmsg=on log_buf_len=16M maxcpus=4 systemd.default_timeout_start_sec=20 plymouth.enable=0"
+        if [[ -f "${rename_extlinux_file}" ]]; then
+            # append missing tokens to APPEND line
+            for tok in ${lpa_stable_args}; do
+                grep -q "[[:space:]]${tok}\([[:space:]]\|$\)" "${rename_extlinux_file}" 2>/dev/null || \
+                    sed -i "s|^[[:space:]]*APPEND \(.*\)$|  APPEND \1 ${tok}|" "${rename_extlinux_file}"
+            done
+        fi
+        if [[ -f "${boot_extlinux_file}" && ! -f "${rename_extlinux_file}" ]]; then
+            for tok in ${lpa_stable_args}; do
+                grep -q "[[:space:]]${tok}\([[:space:]]\|$\)" "${boot_extlinux_file}" 2>/dev/null || \
+                    sed -i "s|^[[:space:]]*APPEND \(.*\)$|  APPEND \1 ${tok}|" "${boot_extlinux_file}"
+            done
+        fi
+        if [[ -f "${armbianenv_conf_file}" ]]; then
+            # ensure extraargs contains stable tokens
+            if grep -q '^extraargs=' "${armbianenv_conf_file}"; then
+                for tok in ${lpa_stable_args}; do
+                    grep -q "${tok}" "${armbianenv_conf_file}" || \
+                        sed -i "s|^extraargs=\(.*\)$|extraargs=\1 ${tok}|" "${armbianenv_conf_file}"
+                done
+            else
+                echo "extraargs=${lpa_stable_args}" >> "${armbianenv_conf_file}"
+            fi
+        fi
+        echo -e "${INFO} Applied lpa3399pro stable cmdline extras: [ ${lpa_stable_args} ]"
+    fi
+
     # Check device configuration files
     [[ -f "${uenv_conf_file}" || -f "${rename_extlinux_file}" || -f "${armbianenv_conf_file}" ]] || error_msg "Missing [ /boot/*Env.txt ]"
 }
