@@ -35,3 +35,22 @@
 
 - `docs/AMLOGIC_ROOTFS_SYNC_LIST_20260712.md`
 - `docs/LPA_AMLOGIC_ALIGNMENT_AUDIT_20260712.md`
+
+## RKNN userspace (optional)
+
+Min NPU runtime (noep fw + proxy + scripts) is in the image. Full RKNN inference needs:
+
+- `/opt/rknn_py39` (Python 3.7 + rknn_toolkit_lite)
+- `/root/npu_deep_test/resnet_18.rknn` (+ zeros test script)
+
+Install on a live board from host stage (do not bloat default img):
+
+```bash
+# on build host
+tools/install_rknn_env_from_stage.sh   # LPA3399Pro repo
+# then on board
+/usr/local/bin/npu_usb_ntb_noep_rknn.sh
+# expect SUMMARY … rknn_rc=0
+```
+
+Rootfs default size for lpa3399pro is 12GiB; first-boot resize is enabled for larger SD cards.

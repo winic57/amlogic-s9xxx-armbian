@@ -966,6 +966,19 @@ replace_kernel() {
     (cd ${tag_rootfs}/usr/lib/modules/${kernel_name}/ && rm -f build source 2>/dev/null && ln -sf /usr/src/${header_path} build)
     [[ "$(ls ${tag_rootfs}/usr/lib/modules/${kernel_name} -l 2>/dev/null | grep "^d" | wc -l)" -eq "1" ]] || error_msg "/usr/lib/modules kernel folder is missing."
 
+    # LPA / ophub-style LOCALVERSION: tree is often "6.18.33-rk35xx-ophub" while
+    # uname -r on bare Image is "6.18.33". Create short alias so modprobe works.
+    if [[ "${board}" == "lpa3399pro" || "${kernel_name}" == *rk35xx* || "${kernel_name}" == *ophub* ]]; then
+        mod_short="$(echo "${kernel_name}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+        if [[ -n "${mod_short}" && "${mod_short}" != "${kernel_name}" ]]; then
+            if [[ ! -e "${tag_rootfs}/usr/lib/modules/${mod_short}" ]]; then
+                ln -sfn "${kernel_name}" "${tag_rootfs}/usr/lib/modules/${mod_short}"
+                echo -e "${INFO} modules alias: /usr/lib/modules/${mod_short} -> ${kernel_name}"
+            fi
+            # ensure depmod metadata exists under both names after first boot; leave tree as-is
+        fi
+    fi
+
     # Special procedures for flashing specific boards
     [[ "${adjust_kernel_files}" == "yes" ]] && adjust_kernel_files_cmd
 }
@@ -1238,8 +1251,14 @@ refactor_rootfs() {
         chmod +x etc/update-motd.d/{10-*,20-*,30-*}
     }
 
-    # Explicitly disable resizing for Amlogic device [ /usr/lib/armbian/armbian-resize-filesystem ], use armbian-tf settings
-    echo "yes" >root/.no_rootfs_resize
+    # Explicitly disable resizing for Amlogic device [ /usr/lib/armbian/armbian-resize-filesystem ], use armbian-tf settings.
+    # LPA3399Pro SD images are often written to larger cards (e.g. 16G); allow first-boot grow.
+    if [[ "${board}" == "lpa3399pro" ]]; then
+        rm -f root/.no_rootfs_resize
+        echo -e "${INFO} lpa3399pro: rootfs auto-resize enabled (no .no_rootfs_resize)"
+    else
+        echo "yes" >root/.no_rootfs_resize
+    fi
 
     # Reduce network latency [ A start job is running for raise network interfaces (5 mins 1 sec) ]
     network_service="usr/lib/systemd/system/networking.service"

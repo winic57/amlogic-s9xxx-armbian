@@ -134,6 +134,22 @@ if [[ "${FDTFILE}" == "rk3399pro-neardi-linux-lc110-base.dtb" ]]; then
             nmcli connection up "Wired connection 1" 2>/dev/null
             log_message "DNS configured via NetworkManager for lpa3399pro."
         fi
+        # Fallback when resolved is masked / no NM: keep static resolv
+        if [[ ! -s /etc/resolv.conf ]] || ! grep -q nameserver /etc/resolv.conf 2>/dev/null; then
+            printf "nameserver 8.8.8.8\nnameserver 1.1.1.1\nnameserver 223.5.5.5\n" > /etc/resolv.conf
+            log_message "Wrote static /etc/resolv.conf for lpa3399pro."
+        fi
+        # modules uname alias (belt and suspenders with rebuild symlink)
+        UREL=$(uname -r 2>/dev/null || true)
+        if [[ -n "$UREL" && ! -d /lib/modules/$UREL ]]; then
+            for cand in /lib/modules/*-rk35xx-ophub /lib/modules/*-ophub; do
+                [[ -d "$cand" ]] || continue
+                ln -sfn "$(basename "$cand")" "/lib/modules/$UREL"
+                depmod -a "$UREL" 2>/dev/null || true
+                log_message "Linked /lib/modules/$UREL -> $(basename "$cand")"
+                break
+            done
+        fi
     ) &
     log_message "lpa3399pro board-specific services started."
 fi

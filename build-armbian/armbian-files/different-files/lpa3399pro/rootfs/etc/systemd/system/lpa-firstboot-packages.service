@@ -1,0 +1,14 @@
+[Unit]
+Description=LPA3399Pro ensure bluez/gpiod packages
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/lpa3399pro/packages.ok
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lpa-firstboot-packages.sh
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

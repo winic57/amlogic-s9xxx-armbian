@@ -52,3 +52,10 @@ Userspace best-effort:
 - `hciattach /dev/ttyS0 rtk_h5 115200 noflow` (may report unknown type depending on bluez)
 
 DTB bluetooth status=okay is packaged; deploy new kernel modules/Image over SSH (no full reflash).
+
+## 2026-07-12 image packaging notes
+
+- rebuild creates `/lib/modules/<x.y.z>` symlink → `…-rk35xx-ophub` when LOCALVERSION differs from uname.
+- Kernel package **must** ship `CONFIG_BT_HCIUART_RTL=y` (verified Jul 12 GHA Image).
+- First boot installs `bluez` + `gpiod` via `lpa-firstboot-packages.service` when network is up.
+- DTB bluetooth under `serial@ff180000` is packaged `status=okay`; firmware `rtl_bt/rtl8821cs_*.bin` is in rootfs overlay.
