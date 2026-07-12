@@ -786,6 +786,14 @@ make_image() {
         mkfs.ext4 -F -q -U ${ROOTFS_UUID} -L "ROOTFS" -b 4k -m 0 ${loop_new}p2 >/dev/null 2>&1
     fi
 
+    # Partition PARTUUIDs (needed for rockchip bare-kernel root= without initramfs)
+    # Filesystem UUID= is NOT resolved by the kernel without initramfs/udev.
+    BOOT_PARTUUID="$(blkid -s PARTUUID -o value ${loop_new}p1 2>/dev/null)"
+    ROOTFS_PARTUUID="$(blkid -s PARTUUID -o value ${loop_new}p2 2>/dev/null)"
+    [[ -z "${BOOT_PARTUUID}" ]] && BOOT_PARTUUID="$(lsblk -no PARTUUID ${loop_new}p1 2>/dev/null | head -n1 | tr -d '[:space:]')"
+    [[ -z "${ROOTFS_PARTUUID}" ]] && ROOTFS_PARTUUID="$(lsblk -no PARTUUID ${loop_new}p2 2>/dev/null | head -n1 | tr -d '[:space:]')"
+    [[ -n "${ROOTFS_PARTUUID}" ]] || error_msg "Unable to read ROOTFS PARTUUID from ${loop_new}p2"
+
     # Write the specific bootloader for [ Amlogic ] boxes
     [[ "${PLATFORM}" == "amlogic" ]] && {
         bootloader_path="${uboot_path}/${PLATFORM}/bootloader"
@@ -803,6 +811,15 @@ make_image() {
     # Write the specific bootloader for [ Rockchip ] boxes
     [[ "${PLATFORM}" == "rockchip" ]] && {
         bootloader_path="${uboot_path}/${PLATFORM}/${board}"
+        # Board-specific SDK/vendor loaders (tracked under different-files/*/u-boot)
+        # override the generic ophub u-boot clone so SD images boot without a
+        # host-side idbloader patch. LPA3399Pro needs Neardi/SDK rksd idbloader.
+        board_uboot_overlay="${different_files}/${board}/u-boot"
+        if [[ -d "${board_uboot_overlay}" ]]; then
+            mkdir -p "${bootloader_path}"
+            cp -af --no-preserve=ownership "${board_uboot_overlay}/." "${bootloader_path}/"
+            echo -e "${INFO} Applied board u-boot overlay: [ ${board_uboot_overlay} ]"
+        fi
         if [[ -n "${BOOTLOADER_IMG}" && -f "${bootloader_path}/${BOOTLOADER_IMG}" ]] &&
             [[ -n "${MAINLINE_UBOOT}" && -f "${bootloader_path}/${MAINLINE_UBOOT}" ]] &&
             [[ -n "${TRUST_IMG}" && -f "${bootloader_path}/${TRUST_IMG}" ]]; then
@@ -888,7 +905,13 @@ copy_files() {
     # Copy the bootloader files
     [[ -d "${tag_rootfs}/usr/lib/u-boot" ]] || mkdir -p "${tag_rootfs}/usr/lib/u-boot"
     [[ -n "${tag_rootfs}" && -d "${tag_rootfs}/usr/lib/u-boot" ]] && rm -rf "${tag_rootfs}/usr/lib/u-boot"/*
-    [[ -d "${bootloader_path}" ]] && cp -af --no-preserve=ownership "${bootloader_path}/." "${tag_rootfs}/usr/lib/u-boot"
+    # Prefer board-specific tracked SDK loaders when present
+    board_uboot_overlay="${different_files}/${board}/u-boot"
+    if [[ -d "${board_uboot_overlay}" ]]; then
+        cp -af --no-preserve=ownership "${board_uboot_overlay}/." "${tag_rootfs}/usr/lib/u-boot"
+    elif [[ -d "${bootloader_path}" ]]; then
+        cp -af --no-preserve=ownership "${bootloader_path}/." "${tag_rootfs}/usr/lib/u-boot"
+    fi
 
     # Copy the overload files
     [[ "${PLATFORM}" == "amlogic" ]] && cp -rf ${uboot_path}/${PLATFORM}/overload/. ${tag_bootfs}
@@ -962,17 +985,24 @@ refactor_bootfs() {
     }
 
     # Set configuration file mount parameters
+    # Rockchip LPA3399Pro boots via SDK U-Boot + extlinux without initramfs.
+    # Bare kernel only resolves root=PARTUUID=/dev/... (not filesystem UUID=).
+    if [[ "${PLATFORM}" == "rockchip" ]]; then
+        root_spec="PARTUUID=${ROOTFS_PARTUUID}"
+    else
+        root_spec="UUID=${ROOTFS_UUID}"
+    fi
     if [[ "${rootfs_type}" == "btrfs" ]]; then
-        # For uEnv.txt
-        uenv_rootdev="UUID=${ROOTFS_UUID} rootflags=compress=zstd:6 rw rootwait rootfstype=btrfs"
+        # For uEnv.txt / extlinux APPEND
+        uenv_rootdev="${root_spec} rootflags=compress=zstd:6 rw rootwait rootfstype=btrfs"
         # For armbianEnv.txt
-        armbianenv_rootdev="UUID=${ROOTFS_UUID}"
+        armbianenv_rootdev="${root_spec}"
         armbianenv_rootflags="compress=zstd:6"
     else
-        # For uEnv.txt
-        uenv_rootdev="UUID=${ROOTFS_UUID} rootflags=data=writeback rw rootwait rootfstype=ext4"
+        # For uEnv.txt / extlinux APPEND
+        uenv_rootdev="${root_spec} rootflags=data=writeback rw rootwait rootfstype=ext4"
         # For armbianEnv.txt
-        armbianenv_rootdev="UUID=${ROOTFS_UUID}"
+        armbianenv_rootdev="${root_spec}"
         armbianenv_rootflags="rw,errors=remount-ro"
     fi
 
@@ -997,6 +1027,11 @@ refactor_bootfs() {
             -e "s|sun.*.dtb|${FDTFILE}|g" \
             -e "s|rk.*.dtb|${FDTFILE}|g" \
             "${boot_extlinux_file}"
+        # Prebuilt rockchip kernels often ship without uInitrd; drop INITRD line so
+        # extlinux can boot Image + DTB only (SDK U-Boot path on LPA3399Pro).
+        if [[ ! -e uInitrd && ! -e uInitrd-${kernel_name:-} ]]; then
+            sed -i '/^[[:space:]]*INITRD[[:space:]]/d' "${boot_extlinux_file}"
+        fi
         # If needed, such as t95z(s905x), rename delete .bak
         [[ "${BOOT_CONF}" == "extlinux.conf" ]] && mv -f "${boot_extlinux_file}" "${rename_extlinux_file}"
     }
