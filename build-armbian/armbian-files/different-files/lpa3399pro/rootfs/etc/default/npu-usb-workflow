@@ -1,37 +1,84 @@
-# LPA3399Pro NPU USB-NTB/noep defaults for mainline 6.18 host.
-# Sourced by npu_mainline_usb_ntb_boot_golden129_usb.sh and pipeline scripts.
-# Caller-exported env vars always win over these defaults.
-
-# Default production path: USB noep + golden129 precise power sequence.
-USB_FW_DIR=/usr/share/npu_fw_usb_ntb_noep
-USB_FW_PROFILE=normal
-NPU_PRECISE_POWERUP_PROFILE=golden129
+# Optional overrides for npu_transfer_proxy.service / npu_startup.sh
+FW_PROFILE=factory
 NPU_POWERCTRL=/usr/local/bin/npu_powerctrl-gpiod
-
-# Boot / RS
-BOOT_SCRIPT=/usr/local/bin/npu_mainline_usb_ntb_boot.sh
-CHECK_SCRIPT=/usr/local/bin/npu_mainline_usb_ntb_check.sh
-WRITE_IMAGES_BEFORE_RS=1
-DB_POLICY=require-maskrom
+START_PROXY=1
+RS_TIMEOUT=90
 POWER_INIT_FIRST=1
-POWER_FORCE_OFF_FIRST=1
-POWER_OFF_SETTLE_SEC=4
-POWER_ON_SETTLE_SEC=8
-RS_TIMEOUT=180
+POWER_FORCE_OFF_FIRST=0
 POST_RS_WAIT_SEC=20
 RS_STRICT=0
+PROXY_CPUINFO_SERIAL_INJECT=auto
+# PROXY_SERIAL_VALUE=
+# PROXY_STARTUP_WAIT_SEC=1
+# Mainline 6.18.x on .113 currently lacks /proc/cpuinfo Serial. The launcher
+# can inject a stable synthetic Serial derived from efuse hash to keep
+# npu_transfer_proxy in listener resident state.
+NPU_PRECISE_POWERUP_PROFILE=golden129
+GPIO_HOLD_SETTLE_MS=0
+GPIO_HOLD_RELEASE_SETTLE_MS=0
+NPU_PRECISE_POWER_GPIO_STAGE=before_low
+NPU_PRECISE_HELPER_CMD=/usr/local/bin/npu_boot
+NPU_PRECISE_HELPER_STAGE=after_stage1
+NPU_PRECISE_POST_POWER_DELAY_MS=4000
+# PCIE_RESCAN_AFTER_POWER=1
+# PCIE_HOST_REBIND_AFTER_POWER=1
+# PCIE_HOST_REBIND_WAIT_SEC=5
+# Safe host-side A/B only. As of 2026-07-04 on .113 this did not recover
+# the NPU PCIe endpoint, so keep disabled by default.
+# WRITE_IMAGES_BEFORE_RS=1   # vendor `npu_upgrade` uses wl+rs; this writes NPU flash, keep disabled by default
 
-# USB / proxy expectations
-EXPECT_USB_IDS=2207:0019
+# Mainline .113 currently uses a dedicated power GPIO by default in
+# npu_powerctrl_gpiod.sh:
+# NPU_PWR_GPIO_ENABLED=1
+# NPU_PWR_CHIP=gpiochip0
+# NPU_PWR_LINE=9
+
+# Golden reference (.129) observations for vendor-style init only.
+# Keep commented until .113 confirms the same wiring:
+# NPU_INIT_GLOBAL_LINES=4=1,10=1,11=1,32=1,35=in,36=0,54=1,55=1,56=1
+# NPU_SUSPEND_TRIGGER_GLOBAL_LINE=36
+# NPU_SUSPEND_ACK_GLOBAL_LINE=35
+# NPU_SUSPEND_ACK_SLEEP_VALUE=1
+# NPU_SUSPEND_ACK_AWAKE_VALUE=0
+
+# Precise holder profile above was validated on .113 together with the
+# refclk test DTB (`npu_refclk_test_20260704`).
+
+# USB loader -> rs -> USB_DEVICE -> proxy -> RKNN pipeline defaults.
+# These are consumed by /usr/local/bin/npu_usb_loader_rs_rknn_pipeline.sh.
+USB_PIPELINE_ENABLE=1
+USB_FW_DIR=/usr/share/npu_fw_usb_ntb_noep
+USB_FW_PROFILE=normal
+WAIT_USB3_TIMEOUT_SEC=45
+WAIT_USB3_POLL_SEC=1
+EXPECT_USB_ID=2207:0019
+# Golden .129 currently enumerates as 2207:1005/rk3xxx/acm; keep 0019 for older notes.
+EXPECT_USB_IDS="2207:0019"
 EXPECT_PROXY_DEVICE=USB_DEVICE
-WAIT_USB3_TIMEOUT_SEC=60
-WAIT_PROXY_TIMEOUT_SEC=30
-START_PROXY=1
+WAIT_PROXY_TIMEOUT_SEC=20
+WAIT_PROXY_POLL_SEC=1
 RESTART_PROXY=1
-FORCE_USB_DEVICE=1
-
-# Keep Host PCIe DMA path safe while using USB RKNN.
-SET_PCIE_DMA_SAFE=1
-
-# RKNN is optional on first boot; enable when runtime/model are installed.
 RUN_RKNN=0
+RKNN_TIMEOUT_SEC=60
+# RKNN_CMD=python3 /root/npu_deep_test/resnet18_zeros_test.py
+RKNN_PYTHONPATH=/root/npu_deep_manual:/root/npu_deep_test
+RKNN_LD_LIBRARY_PATH=/root/npu_deep_manual:/usr/lib:/usr/local/lib
+FAIL_ON_NO_USB3=1
+FAIL_ON_NO_USB_DEVICE=1
+SNAP_DMESG_LINES=160
+SET_PCIE_DMA_SAFE=1
+UBOOT_ADDR=0x20000
+TRUST_ADDR=0x20800
+BOOT_ADDR=0x21000
+
+# Optional post-rs USB recovery A/B knobs. Keep disabled by default; enable one
+# at a time after rs succeeds but 2207:0019 does not enumerate.
+POST_RS_USB_REBIND=0
+POST_RS_USB_REBIND_DELAY_SEC=0
+POST_RS_USB_REBIND_DRIVER=xhci-hcd
+POST_RS_USB_REBIND_DEVICES="xhci-hcd.0.auto xhci-hcd.8.auto"
+POST_RS_DWC3_REBIND=0
+POST_RS_DWC3_REBIND_DRIVER=dwc3
+POST_RS_DWC3_REBIND_DEVICES="fe800000.usb fe900000.usb"
+POST_RS_USBDEV_RESCAN=0
+POST_RS_USBDEV_RESCAN_DELAY_SEC=0

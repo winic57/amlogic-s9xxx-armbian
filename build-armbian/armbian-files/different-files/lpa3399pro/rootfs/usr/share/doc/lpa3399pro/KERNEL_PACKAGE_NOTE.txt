@@ -3,10 +3,13 @@ Kernel package preference for image builds:
 2) optional public release download only as fallback (LPA_KERNEL_STAGE_PREFER=release)
 
 Current checked-in package source:
-- LPA3399Pro GHA artifact gha_29072024640_0044 (commit c25c019 lineage)
+- LPA3399Pro GHA artifact gha_29072024640_0044
 - Image sha256: 331e45b75fe755ddbd64e10ad53a0ad67011685b6a7e59cb89582960420a2c50
-- Matches the known-good SD card boot kernel as of 2026-07-12
+- Matches golden SD boot kernel (2026-07-12)
 - Markers: pcie_safe_retrain, pcie_deferred, npu_acm
 
-Synced NPU userspace scripts from LPA3399Pro tools/; firmware profiles are
-expected to be installed on-device (or already present on golden SD).
+Min NPU package is bundled in this board rootfs:
+- /usr/share/npu_fw_usb_ntb_noep
+- /usr/bin/upgrade_tool + npu_transfer_proxy
+- NPU helper scripts and npu_transfer_proxy.service
+See NPU_MIN_PACKAGE.md
