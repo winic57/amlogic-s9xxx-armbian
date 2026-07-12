@@ -1,0 +1,37 @@
+# LPA3399Pro NPU USB-NTB/noep defaults for mainline 6.18 host.
+# Sourced by npu_mainline_usb_ntb_boot_golden129_usb.sh and pipeline scripts.
+# Caller-exported env vars always win over these defaults.
+
+# Default production path: USB noep + golden129 precise power sequence.
+USB_FW_DIR=/usr/share/npu_fw_usb_ntb_noep
+USB_FW_PROFILE=normal
+NPU_PRECISE_POWERUP_PROFILE=golden129
+NPU_POWERCTRL=/usr/local/bin/npu_powerctrl-gpiod
+
+# Boot / RS
+BOOT_SCRIPT=/usr/local/bin/npu_mainline_usb_ntb_boot.sh
+CHECK_SCRIPT=/usr/local/bin/npu_mainline_usb_ntb_check.sh
+WRITE_IMAGES_BEFORE_RS=1
+DB_POLICY=require-maskrom
+POWER_INIT_FIRST=1
+POWER_FORCE_OFF_FIRST=1
+POWER_OFF_SETTLE_SEC=4
+POWER_ON_SETTLE_SEC=8
+RS_TIMEOUT=180
+POST_RS_WAIT_SEC=20
+RS_STRICT=0
+
+# USB / proxy expectations
+EXPECT_USB_IDS=2207:0019
+EXPECT_PROXY_DEVICE=USB_DEVICE
+WAIT_USB3_TIMEOUT_SEC=60
+WAIT_PROXY_TIMEOUT_SEC=30
+START_PROXY=1
+RESTART_PROXY=1
+FORCE_USB_DEVICE=1
+
+# Keep Host PCIe DMA path safe while using USB RKNN.
+SET_PCIE_DMA_SAFE=1
+
+# RKNN is optional on first boot; enable when runtime/model are installed.
+RUN_RKNN=0

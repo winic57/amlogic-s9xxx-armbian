@@ -1,0 +1,5 @@
+Kernel package preference for image builds:
+1) repository kdevbuild/kernel-packages/rk35xx/6.18.33 (injected LPA 0031 artifacts)
+2) optional download from winic57/LPA3399Pro public release only as fallback
+
+Synced NPU userspace scripts from LPA3399Pro tools/ on 2026-07-12.

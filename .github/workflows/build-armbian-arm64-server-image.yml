@@ -468,45 +468,118 @@ jobs:
       - name: Stage LPA3399Pro kernel (6.18.33)
         if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
         env:
+          # Optional override only.  Default path prefers the checked-in
+          # kdevbuild package (injected from verified LPA 0031 artifacts).
           LPA_KERNEL_RELEASE_BASE: https://github.com/winic57/LPA3399Pro/releases/download/Neardi-LPA3399Pro-kernel-6.18
           LPA_KERNEL_PROXY_PREFIX: https://gitproxy.mrhjx.cn/
+          # Prefer local package unless explicitly forced:
+          #   LPA_KERNEL_STAGE_PREFER=release
+          LPA_KERNEL_STAGE_PREFER: ${{ vars.LPA_KERNEL_STAGE_PREFER || 'local' }}
           KERNEL_NAME: 6.18.33-rk35xx-ophub
         run: |
           set -euo pipefail
-          # The ophub/kernel GitHub repo has no rk35xx packages.  Prefer the
-          # latest LPA3399Pro public kernel release (Image + dtbs.tar.gz +
-          # kos.tar.gz) and synthesize the ophub package layout expected by
-          # rebuild; fall back to the checked-in package if the network is down.
+          # Priority:
+          #   1) checked-in kdevbuild/kernel-packages (verified LPA inject)
+          #   2) optional public release download (only if local missing/forced)
+          # ophub/kernel has no rk35xx packages for this board.
           dst="build-armbian/kernel/rk35xx/6.18.33"
           src="kdevbuild/kernel-packages/rk35xx/6.18.33"
           work="$(mktemp -d)"
           mkdir -p "${dst}"
+          prefer="${LPA_KERNEL_STAGE_PREFER:-local}"
+          echo "LPA_KERNEL_STAGE_PREFER=${prefer}"
+
+          local_pkg_ok() {
+            [[ -f "${src}/boot-${KERNEL_NAME}.tar.gz" \
+              && -f "${src}/dtb-rockchip-${KERNEL_NAME}.tar.gz" \
+              && -f "${src}/modules-${KERNEL_NAME}.tar.gz" ]]
+          }
+
+          stage_from_local() {
+            echo "Using checked-in kernel package from ${src}"
+            cp -avf "${src}/." "${dst}/"
+            # Keep header from package if present; otherwise leave absent.
+            ls -lh "${dst}/"
+          }
+
           download_one() {
             local name="$1"
             local url="${LPA_KERNEL_PROXY_PREFIX}${LPA_KERNEL_RELEASE_BASE}/${name}"
             curl -fL --retry 5 --retry-delay 10 --connect-timeout 20 -o "${work}/${name}" "${url}"
           }
-          if download_one Image && download_one dtbs.tar.gz && download_one kos.tar.gz; then
-            echo "Using latest LPA3399Pro release kernel artifacts."
-            mkdir -p "${work}/boot/dtb/rockchip" "${work}/dtb_pkg" "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel" "${work}/headers/include"
+
+          stage_from_release() {
+            echo "Using LPA3399Pro public release kernel artifacts."
+            mkdir -p "${work}/boot/dtb/rockchip" "${work}/dtb_pkg" "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel"
             install -m 0644 "${work}/Image" "${work}/boot/vmlinuz-${KERNEL_NAME}"
-            install -m 0644 compile-kernel/tools/config/config-6.18 "${work}/boot/config-${KERNEL_NAME}"
+            if [[ -f compile-kernel/tools/config/config-6.18 ]]; then
+              install -m 0644 compile-kernel/tools/config/config-6.18 "${work}/boot/config-${KERNEL_NAME}"
+            else
+              : >"${work}/boot/config-${KERNEL_NAME}"
+            fi
             tar -xzf "${work}/dtbs.tar.gz" -C "${work}/dtb_pkg"
             find "${work}/dtb_pkg" -type f -name '*.dtb' -exec cp -av {} "${work}/boot/dtb/rockchip/" \;
             (cd "${work}/boot" && tar -czf "${dst}/boot-${KERNEL_NAME}.tar.gz" .)
             (cd "${work}/boot/dtb/rockchip" && tar -czf "${dst}/dtb-rockchip-${KERNEL_NAME}.tar.gz" .)
             tar -xzf "${work}/kos.tar.gz" -C "${work}"
-            find "${work}/kos" -type f -name '*.ko' -exec cp -av {} "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel/" \;
+            if [[ -d "${work}/kos" ]]; then
+              find "${work}/kos" -type f -name '*.ko' -exec cp -av {} "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel/" \;
+            else
+              find "${work}" -type f -name '*.ko' -exec cp -av {} "${work}/modroot/lib/modules/${KERNEL_NAME}/kernel/" \;
+            fi
             touch "${work}/modroot/lib/modules/${KERNEL_NAME}/modules.order" "${work}/modroot/lib/modules/${KERNEL_NAME}/modules.builtin"
             depmod -b "${work}/modroot" "${KERNEL_NAME}" || true
             (cd "${work}/modroot/lib/modules" && tar -czf "${dst}/modules-${KERNEL_NAME}.tar.gz" "${KERNEL_NAME}")
-            cp -af "${src}/header-${KERNEL_NAME}.tar.gz" "${dst}/header-${KERNEL_NAME}.tar.gz"
+            if [[ -f "${src}/header-${KERNEL_NAME}.tar.gz" ]]; then
+              cp -af "${src}/header-${KERNEL_NAME}.tar.gz" "${dst}/header-${KERNEL_NAME}.tar.gz"
+            fi
             (cd "${dst}" && sha256sum *.tar.gz > sha256sums)
+          }
+
+          staged=0
+          if [[ "${prefer}" == "local" ]] && local_pkg_ok; then
+            stage_from_local
+            staged=1
+          elif [[ "${prefer}" == "release" ]]; then
+            if download_one Image && download_one dtbs.tar.gz && download_one kos.tar.gz; then
+              stage_from_release
+              staged=1
+            elif local_pkg_ok; then
+              echo "warning: release download failed; falling back to checked-in kernel package."
+              stage_from_local
+              staged=1
+            fi
           else
-            echo "warning: release artifact download failed; falling back to checked-in kernel package."
-            [[ -f "${src}/boot-${KERNEL_NAME}.tar.gz" ]] || { echo "error: prebuilt kernel missing at ${src}"; exit 1; }
-            cp -avf "${src}/." "${dst}/"
+            # prefer=local but incomplete, or unknown prefer value
+            if local_pkg_ok; then
+              stage_from_local
+              staged=1
+            elif download_one Image && download_one dtbs.tar.gz && download_one kos.tar.gz; then
+              echo "warning: local package incomplete; falling back to public release download."
+              stage_from_release
+              staged=1
+            fi
           fi
+
+          if [[ "${staged}" != "1" ]]; then
+            echo "error: no kernel package available (local missing and release download failed)"
+            ls -la "${src}" || true
+            exit 1
+          fi
+
+          # Sanity: boot package must contain vmlinuz
+          tmpcheck="$(mktemp -d)"
+          tar -tzf "${dst}/boot-${KERNEL_NAME}.tar.gz" | head
+          tar -xzf "${dst}/boot-${KERNEL_NAME}.tar.gz" -C "${tmpcheck}" vmlinuz-${KERNEL_NAME} 2>/dev/null \
+            || tar -xzf "${dst}/boot-${KERNEL_NAME}.tar.gz" -C "${tmpcheck}"
+          if [[ ! -f "${tmpcheck}/vmlinuz-${KERNEL_NAME}" ]]; then
+            echo "error: staged boot package missing vmlinuz-${KERNEL_NAME}"
+            find "${tmpcheck}" -maxdepth 2 -type f | head
+            exit 1
+          fi
+          echo "Staged kernel package markers:"
+          strings "${tmpcheck}/vmlinuz-${KERNEL_NAME}" | grep -E 'npu_acm|pcie_deferred|pcie_safe_retrain|dma_start_once' | sort -u | head -20 || true
+          rm -rf "${tmpcheck}" "${work}"
           echo "Staged kernel package:"
           ls -lh "${dst}/"
 
