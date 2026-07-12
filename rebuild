@@ -1251,13 +1251,15 @@ refactor_rootfs() {
         chmod +x etc/update-motd.d/{10-*,20-*,30-*}
     }
 
-    # Explicitly disable resizing for Amlogic device [ /usr/lib/armbian/armbian-resize-filesystem ], use armbian-tf settings.
-    # LPA3399Pro SD images are often written to larger cards (e.g. 16G); allow first-boot grow.
+    # Rootfs expand flag for start_service.sh + armbian-tf (name is historical/misleading):
+    #   content "yes"  -> first boot runs armbian-tf to grow last partition to media end
+    #   content "no"   -> already resized; do not expand again
+    #   file missing   -> start_service does nothing (no auto grow)
+    # armbian-resize-filesystem.service is usually disabled; ophub path uses armbian-tf.
+    # LPA3399Pro: keep "yes" so the same ~12GiB image can fill 16G/32G/64G SD or eMMC after dd.
+    echo "yes" >root/.no_rootfs_resize
     if [[ "${board}" == "lpa3399pro" ]]; then
-        rm -f root/.no_rootfs_resize
-        echo -e "${INFO} lpa3399pro: rootfs auto-resize enabled (no .no_rootfs_resize)"
-    else
-        echo "yes" >root/.no_rootfs_resize
+        echo -e "${INFO} lpa3399pro: rootfs auto-resize armed (.no_rootfs_resize=yes -> armbian-tf on first boot)"
     fi
 
     # Reduce network latency [ A start job is running for raise network interfaces (5 mins 1 sec) ]
