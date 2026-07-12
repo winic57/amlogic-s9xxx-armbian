@@ -1,5 +1,12 @@
 Kernel package preference for image builds:
-1) repository kdevbuild/kernel-packages/rk35xx/6.18.33 (injected LPA 0031 artifacts)
-2) optional download from winic57/LPA3399Pro public release only as fallback
+1) repository kdevbuild/kernel-packages/rk35xx/6.18.33
+2) optional public release download only as fallback (LPA_KERNEL_STAGE_PREFER=release)
 
-Synced NPU userspace scripts from LPA3399Pro tools/ on 2026-07-12.
+Current checked-in package source:
+- LPA3399Pro GHA artifact gha_29072024640_0044 (commit c25c019 lineage)
+- Image sha256: 331e45b75fe755ddbd64e10ad53a0ad67011685b6a7e59cb89582960420a2c50
+- Matches the known-good SD card boot kernel as of 2026-07-12
+- Markers: pcie_safe_retrain, pcie_deferred, npu_acm
+
+Synced NPU userspace scripts from LPA3399Pro tools/; firmware profiles are
+expected to be installed on-device (or already present on golden SD).
