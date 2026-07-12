@@ -1,0 +1,13 @@
+[Unit]
+Description=Quectel EC20/EC200A 4G power-on sequence (LPA3399Pro)
+After=local-fs.target systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ec20-init.sh
+RemainAfterExit=yes
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target
