@@ -6,9 +6,15 @@ Use ophub/LPA package with:
 - Image build string after 2026-07-12 12:50 UTC preferred
 
 ## rebuild board overrides (armbian-board-release.conf)
-- `root_mb=12288` (default global is 3000 — too small)
+- `boot_mb=300` (was 512; kernel+dtb ~50MiB, 300 leaves more space for root)
+- `root_mb=12288` (default global is 3000 — too small; first-boot grow fills media)
 - modules short-name alias for uname vs LOCALVERSION
 - `.no_rootfs_resize` content **`yes`** arms first-boot `armbian-tf` grow (flag name is inverted / historical)
+
+### Why df shows ~14G on a "16G" eMMC
+Marketing 16GB ≈ 14.7 GiB binary. Layout: skip~16MiB + BOOT + ROOT to end.
+With boot=300: root ≈ disk−316MiB ≈ 14.4 GiB. With boot=511: root ≈ 14.2 GiB.
+`df` "14G" is the **root filesystem** size (p2), not the whole chip.
 
 ## rootfs overlay
 - WiFi/BT/4G services, NPU min, BT firmware, static resolv.conf
