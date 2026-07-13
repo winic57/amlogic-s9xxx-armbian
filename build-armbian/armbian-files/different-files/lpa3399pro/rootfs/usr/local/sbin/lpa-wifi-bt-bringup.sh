@@ -15,7 +15,7 @@ if [[ -d "/lib/modules/${UREL}" && ! -f "/lib/modules/${UREL}/modules.dep" ]]; t
   depmod -a "${UREL}" || true
 fi
 
-# 2) load reset_gpio then wifi/bt stack
+# 2) load wifi/bt stack; BT_HCIUART_RTL=y (built-in), btrtl and hci_uart as modules
 for m in reset_gpio rfkill cfg80211 mac80211 rtw88_core rtw88_sdio rtw88_8821c rtw88_8821cs bluetooth btrtl hci_uart; do
   modprobe "$m" 2>/dev/null || true
 done
@@ -25,7 +25,6 @@ if [[ -w /sys/bus/platform/drivers_probe ]]; then
   echo sdio-pwrseq > /sys/bus/platform/drivers_probe 2>/dev/null || true
   echo fe310000.mmc > /sys/bus/platform/drivers_probe 2>/dev/null || true
 fi
-# bind if still unbound
 if [[ -e /sys/devices/platform/sdio-pwrseq && ! -e /sys/devices/platform/sdio-pwrseq/driver ]]; then
   echo sdio-pwrseq > /sys/bus/platform/drivers/pwrseq_simple/bind 2>/dev/null || true
 fi
@@ -41,25 +40,38 @@ else
   log "wlan0 missing (check dmesg for sdio-pwrseq/rtw88)"
 fi
 
-# 4) Bluetooth: hold enable/device-wake if gpioset available; try hciattach
-# GPIO: chip2 line28 enable, line26 device-wake (from DT serial@ff180000/bluetooth)
+# 4) Bluetooth GPIO: hold enable/device-wake
+# GPIO: chip2 line28 enable, line26 device-wake (DT serial@ff180000/bluetooth)
 if command -v gpioset >/dev/null 2>&1; then
   if ! pgrep -f 'gpioset -c 2 .*28=1' >/dev/null 2>&1; then
-    # keep lines driven
     nohup gpioset -c 2 28=1 26=1 >/run/lpa-bt-gpioset.log 2>&1 &
     log "BT GPIO enable held via gpioset"
   fi
 fi
 
-# Prefer kernel serdev if DT bluetooth status=okay and CONFIG_BT_HCIUART_RTL=y
-# Current 6.18.33 package has CONFIG_BT_HCIUART_RTL not set; userspace attach is best-effort.
+# 5) Bluetooth serdev bind: DT bluetooth status=okay + CONFIG_BT_HCIUART_RTL=y
+# kernel serdev should auto-probe after modules loaded; kick ff180000 serial serdev
 if [[ ! -e /sys/class/bluetooth/hci0 ]]; then
+  # Kick serdev bus probe for ff180000 uart
+  if [[ -w /sys/bus/platform/drivers_probe ]]; then
+    echo ff180000.serial > /sys/bus/platform/drivers_probe 2>/dev/null || true
+  fi
+  # Also try serdev bus probe
+  if [[ -w /sys/bus/serdev/drivers_probe ]]; then
+    ls /sys/bus/serdev/devices/ 2>/dev/null | while read dev; do
+      echo "$dev" > /sys/bus/serdev/drivers_probe 2>/dev/null || true
+    done
+  fi
+  sleep 2
+fi
+
+# 6) Fallback: userspace hciattach if serdev did not produce hci0
+if [[ ! -e /sys/class/bluetooth/hci0 ]]; then
+  log "serdev did not attach hci0; trying userspace hciattach"
   systemctl stop serial-getty@ttyS0.service 2>/dev/null || true
   fuser -k /dev/ttyS0 2>/dev/null || true
   if command -v hciattach >/dev/null 2>&1; then
-    # rtk_h5 may be unavailable depending on bluez build; try any as fallback
-    hciattach /dev/ttyS0 rtk_h5 115200 noflow 2>/run/lpa-hciattach.log || \
-      hciattach /dev/ttyS0 any 115200 noflow 2>>/run/lpa-hciattach.log || true
+    hciattach /dev/ttyS0 any 115200 noflow >/run/lpa-hciattach.log 2>&1 || true
   fi
 fi
 
@@ -67,7 +79,7 @@ if [[ -e /sys/class/bluetooth/hci0 ]]; then
   log "hci0 present"
   command -v hciconfig >/dev/null && hciconfig hci0 up 2>/dev/null || true
 else
-  log "hci0 missing (need CONFIG_BT_HCIUART_RTL=y or working rtk_hciattach + BT power)"
+  log "hci0 missing (serdev probe failed; check DT bluetooth status and btrtl firmware)"
 fi
 
 exit 0

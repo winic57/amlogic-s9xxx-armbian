@@ -2,7 +2,10 @@
   "data-root": "/mnt/sdcard/docker",
   "storage-driver": "overlay2",
   "iptables": true,
-  "ip6tables": true,
+  "ip6tables": false,
+  "ip-masq": true,
+  "ip-forward": true,
+  "userland-proxy": true,
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "5m",
