@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# First-boot / every-boot lightweight package ensure for LPA3399Pro.
-# Installs bluez + gpiod when network is available (needed for BT userspace and EC20/NPU gpioset).
+# First-boot package ensure for LPA3399Pro.
+# - bluez + gpiod: BT / EC20 / NPU GPIO
+# - docker.io + docker-cli: optional; data-root on TF /mnt/sdcard when present
 set -euo pipefail
 FLAG=/var/lib/lpa3399pro/packages.ok
 LOG=/var/log/lpa-firstboot-packages.log
@@ -8,18 +9,16 @@ mkdir -p /var/lib/lpa3399pro
 exec >>"$LOG" 2>&1
 echo "=== $(date -Is) ==="
 
-need_pkg() {
-  dpkg -s "$1" >/dev/null 2>&1 || return 0
-  return 1
+pkgs_ok() {
+  dpkg -s bluez gpiod >/dev/null 2>&1 && command -v gpioset >/dev/null 2>&1 \
+    && dpkg -s docker.io docker-cli >/dev/null 2>&1 && command -v docker >/dev/null 2>&1
 }
 
-# Always try once if flag missing; re-run if packages still missing
-if [[ -f "$FLAG" ]] && dpkg -s bluez gpiod >/dev/null 2>&1; then
+if [[ -f "$FLAG" ]] && pkgs_ok; then
   echo "already ok"
   exit 0
 fi
 
-# Wait for network a bit
 for i in $(seq 1 30); do
   if ping -c1 -W2 8.8.8.8 >/dev/null 2>&1 || ping -c1 -W2 223.5.5.5 >/dev/null 2>&1; then
     break
@@ -29,14 +28,24 @@ done
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq || true
-apt-get install -y --no-install-recommends bluez gpiod libgpiod-bin 2>/dev/null \
-  || apt-get install -y --no-install-recommends bluez gpiod || true
+apt-get install -y --no-install-recommends bluez gpiod libgpiod-bin docker.io docker-cli iptables 2>/dev/null \
+  || apt-get install -y --no-install-recommends bluez gpiod docker.io docker-cli iptables || true
 
-# enable BT service if present
+# Prefer iptables-legacy (matches CONFIG_NETFILTER_XTABLES_LEGACY kernel modules)
+if [[ -x /usr/sbin/iptables-legacy ]]; then
+  update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true
+  update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true
+fi
+
 systemctl enable bluetooth.service 2>/dev/null || true
-systemctl start bluetooth.service 2>/dev/null || true
+systemctl enable docker.service 2>/dev/null || true
 
-if dpkg -s bluez >/dev/null 2>&1 && command -v gpioset >/dev/null 2>&1; then
+# Prepare TF docker dirs if card mounted
+if mountpoint -q /mnt/sdcard; then
+  mkdir -p /mnt/sdcard/docker /mnt/sdcard/data
+fi
+
+if pkgs_ok; then
   touch "$FLAG"
   echo "packages ok"
 else

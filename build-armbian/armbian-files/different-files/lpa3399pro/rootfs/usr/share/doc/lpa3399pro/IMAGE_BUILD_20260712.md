@@ -50,3 +50,8 @@ To flash Armbian to eMMC: dd the Armbian GPT image (or install tool that copies 
 To keep vendor multi-part eMMC: only replace rootfs content, not the whole Armbian partition map.
 
 Full write-up in LPA repo: `docs/EMMC_SIZE_SDK_VS_ARMBIAN_20260712.md`
+
+## Docker / netfilter (2026-07-13)
+
+Kernel must ship legacy iptables tables (`NETFILTER_XTABLES_LEGACY=y` + `IP_NF_FILTER/NAT/...=m`). See LPA `docs/DOCKER_NETFILTER_MODULES_20260713.md`.
+Board rootfs loads them via `etc/modules-load.d/lpa-docker-netfilter.conf` and defaults docker data-root to `/mnt/sdcard/docker` (TF optional, nofail).

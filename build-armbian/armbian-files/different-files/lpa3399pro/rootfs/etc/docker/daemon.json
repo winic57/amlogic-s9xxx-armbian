@@ -1,0 +1,12 @@
+{
+  "data-root": "/mnt/sdcard/docker",
+  "storage-driver": "overlay2",
+  "iptables": true,
+  "ip6tables": true,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "5m",
+    "max-file": "3"
+  },
+  "live-restore": true
+}
