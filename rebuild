@@ -1065,7 +1065,7 @@ refactor_bootfs() {
     # cmdline: maxcpus=4 (disable A72 big cores to avoid CPU4/5 Oops killing init),
     # psci_checker blacklist, rootdelay, etc. See LPA3399Pro docs 2026-06-18 boot series.
     if [[ "${board}" == "lpa3399pro" ]]; then
-        lpa_stable_args="rootdelay=10 panic=0 usbcore.autosuspend=-1 initcall_blacklist=psci_checker printk.devkmsg=on log_buf_len=16M maxcpus=4 systemd.default_timeout_start_sec=20 plymouth.enable=0"
+        lpa_stable_args="rootdelay=10 panic=0 usbcore.autosuspend=-1 initcall_blacklist=psci_checker printk.devkmsg=on log_buf_len=16M maxcpus=4 systemd.default_timeout_start_sec=20 plymouth.enable=0 video=HDMI-A-1:1024x768@60"
         if [[ -f "${rename_extlinux_file}" ]]; then
             # append missing tokens to APPEND line
             for tok in ${lpa_stable_args}; do

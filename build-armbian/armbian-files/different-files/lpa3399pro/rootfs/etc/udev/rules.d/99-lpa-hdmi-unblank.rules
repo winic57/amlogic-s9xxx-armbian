@@ -1,0 +1,2 @@
+ACTION=="add", SUBSYSTEM=="graphics", KERNEL=="fb0", RUN+="/bin/sh -c 'echo 0 > /sys/class/graphics/fb0/blank'"
+ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card0-*", RUN+="/bin/sh -c 'echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true'"

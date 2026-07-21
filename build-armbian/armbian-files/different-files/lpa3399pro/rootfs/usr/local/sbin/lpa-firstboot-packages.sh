@@ -2,6 +2,7 @@
 # First-boot package ensure for LPA3399Pro.
 # - bluez + gpiod: BT / EC20 / NPU GPIO
 # - docker.io + docker-cli: optional; data-root on TF /mnt/sdcard when present
+# - libdrm-tests: modetest for HDMI clock-fix / mode helper
 set -euo pipefail
 FLAG=/var/lib/lpa3399pro/packages.ok
 LOG=/var/log/lpa-firstboot-packages.log
@@ -11,7 +12,8 @@ echo "=== $(date -Is) ==="
 
 pkgs_ok() {
   dpkg -s bluez gpiod >/dev/null 2>&1 && command -v gpioset >/dev/null 2>&1 \
-    && dpkg -s docker.io docker-cli >/dev/null 2>&1 && command -v docker >/dev/null 2>&1
+    && dpkg -s docker.io docker-cli >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 \
+    && dpkg -s libdrm-tests >/dev/null 2>&1 && command -v modetest >/dev/null 2>&1
 }
 
 if [[ -f "$FLAG" ]] && pkgs_ok; then
@@ -28,8 +30,8 @@ done
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq || true
-apt-get install -y --no-install-recommends bluez gpiod libgpiod-bin docker.io docker-cli iptables 2>/dev/null \
-  || apt-get install -y --no-install-recommends bluez gpiod docker.io docker-cli iptables || true
+apt-get install -y --no-install-recommends bluez gpiod libgpiod-bin docker.io docker-cli iptables libdrm-tests 2>/dev/null \
+  || apt-get install -y --no-install-recommends bluez gpiod docker.io docker-cli iptables libdrm-tests || true
 
 # Prefer iptables-legacy (matches CONFIG_NETFILTER_XTABLES_LEGACY kernel modules)
 if [[ -x /usr/sbin/iptables-legacy ]]; then
